@@ -1,0 +1,32 @@
+---
+title: "Pierwszyvraport"
+author: "Mateusz_Kapusta"
+date: '2022-03-02'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+data(iris)
+library(ggplot2)
+```
+Testujemy RMarkdown. Wpierw do wektora $x$ przypisujemy $200$ wartości z rozkładu normalnego.
+
+```{r}
+X<-rnorm(1:200,4,2)
+X<-data.frame(X)
+```
+Teraz pora na wykres
+```{r}
+ggplot()+geom_histogram(data=X,bins=30,aes(X,y=..density..))
+```
+Przecdzimy dalej i wybieramy wektor $x$, $y$ i tworzymy z nich ramkę.
+```{r}
+x<-seq(from=-5,to=15,by=0.2)
+y<-dnorm(x, 4, 2)
+d<-data.frame(x,y)
+```
+Teraz pora na końcowy wykres
+```{r}
+ggplot(data=X,aes(x=X,y=..density..))+geom_histogram(bins=30)+geom_line(data=d,aes(x=x,y=y))
+```
