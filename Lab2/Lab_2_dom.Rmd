@@ -1,0 +1,38 @@
+---
+title: "Labolatorium 2-zadanie dodatkowe"
+author: "Mateusz_Kapusta"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+```
+Wpierw zdefiniujmy funkcję sprawdzającą czy punkt leży w środku koła o promieniu 1.
+```{r}
+inside<-function(n){
+  if (n[1]^2+n[2]^2<=1){wyn=1}
+  else {wyn=0}
+  wyn
+}
+```
+Teraz pora na losowanie liczba i obliczenie estymowanego pola dla różnych liczności prób.
+```{r}
+npoints=1000
+n<-matrix(runif(2*npoints),ncol=2)
+y<-sapply(2:npoints, (\(x) 4*mean(apply(n[1:x,],MARGIN = 1,inside))))
+```
+Wykres nasz wygląda tak
+```{r}
+data_plot<-data.frame('range'=2:npoints,'Error'=y-pi)
+ggplot(data_plot,aes(x=range,y=Error))+geom_point(alpha=0.1)+theme_minimal()+geom_smooth()
+```
+Sprawdźmy teraz, jaka jest średnie obciażenie z $1000$ prób każda po $10000$ punktów
+```{r}
+wyn<-sapply(1:1000, (\(x) 4*mean(apply(matrix(runif(2*10000),ncol=2),MARGIN = 1,inside))))-pi
+pi_m<-mean(wyn)
+pi_od<-var(wyn)
+print(c(pi_m,pi_od))
+```
+Widzimy więc, że obciązenie estymatora monte carlo jest bardzo małe. 
