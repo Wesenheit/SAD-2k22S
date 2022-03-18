@@ -1,0 +1,30 @@
+---
+title: "Zadanie domowe nr 3"
+author: "Mateusz Kapusta"
+date: '2022-03-18'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+```
+Wpierw losujemy dane i wybieramy a.
+```{r}
+a<-100
+n<-matrix(runif(10000,max=a),ncol=10)
+```
+Urzywając MLE estymujemy parametry $a$ dla każdego zestawu $10$ wartości i robimy histogram.
+```{r}
+aestim<-apply(n, 1,max)
+da<-data.frame(aestim)
+ggplot(da,aes(x=aestim))+geom_histogram(bins=30)
+```
+
+Teraz dla każdego zestawu obliczamy przedziały ufności
+```{r}
+alp<-0.95 # poziom ufności
+przed<-apply(n, 1,(function(x) c(max(x),max(x)/alp^(1/10))))
+num<-sapply(1:1000, (function (i) a< przed[2,i] & a> przed[1,i] ))
+```
+Sumarycznie w środku przedziałów znajduje się prawidłowa wartość w dokładnie `r sum(num)` z 1000 przypadków. 
