@@ -1,0 +1,71 @@
+---
+title: "Labolatorium nr 4- zadanie domowe"
+author: "Mateusz Kapusta"
+date: '2022-03-24'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+slownik <- c('02' = 'Dolnośląskie', '04' = 'Kujawsko-pomorskie',
+             '06' = 'Lubelskie', '08' = 'Lubuskie',
+             '10' = 'Łódzkie', '12' = 'Małopolskie',
+             '14' = 'Mazowieckie', '16' = 'Opolskie', 
+             '18' = 'Podkarpackie', '20' = 'Podlaskie',
+             '22' = 'Pomorskie', '24' = 'Śląskie',
+             '26' = 'Świętokrzyskie', '28' = 'Warmińsko-mazurskie',
+             '30' = 'Wielkopolskie',  '32' = 'Zachodniopomorskie')
+```
+\section{Zadanie nr 1}
+Wpierw jak zwykle ładujemy dane i dodajemy kolumnę z województwami.
+```{r}
+Zadluzenie.gmin <- read.delim("Zadluzenie gmin.csv", colClasses = c('factor', 'factor', 'factor', 'numeric', 'factor', 'factor'))
+Zadluzenie.gmin$Wojewodztwo<-slownik[sapply(Zadluzenie.gmin$Kod.Teryt,substr,start=0,stop=2)]
+```
+Przygotowujemy dwie ramki danych dla województwa Opolskiego i Dolnośląskiego.
+```{r}
+dolne<-Zadluzenie.gmin[Zadluzenie.gmin$Wojewodztwo=="Dolnośląskie",]
+opole<-Zadluzenie.gmin[Zadluzenie.gmin$Wojewodztwo=="Opolskie",]
+```
+Teraz pora policzyć odpowiednie wariancje i średnie
+```{r}
+ndolne<-nrow(dolne)
+nopole<-nrow(opole)
+dolmean<-mean(dolne$Zadłużenie.gmin)
+opolmean<-mean(opole$Zadłużenie.gmin)
+wardol<-var(dolne$Zadłużenie.gmin)
+waropole<-var(opole$Zadłużenie.gmin)
+```
+Teraz pora na policzenie wartości wartości statystyki Welscha.
+```{r}
+wel<-(dolmean-opolmean)/sqrt(waropole/nopole+wardol/ndolne)
+swo<-(waropole/nopole+wardol/ndolne)^2/(waropole^2/(nopole^2*(nopole-1))+wardol^2/(ndolne^2*(ndolne-1)))
+```
+wartość naszej statystyki to `r wel` co biorąc pod uwagę liczbę stopni swobody `r swo` pozwala nam określić jaki jest zbiór krytyczny dla naszego przypadku.
+```{r}
+a<-0.05
+qt(a/2,df=swo)
+```
+widzimy więc, że wartość naszej statystyki wpada do naszego zbioru krytycznego i hipotezę o równym zadłużeniu należy odrzucić. Proawdopodobieństwo tego, że nasza statystyka przyjmuje co do modułu większe wartości niż wartość `wel` to 
+```{r}
+2*(1-pt(wel,swo))
+```
+zastosowaliśmy tutaj test dwustronny. Porownując z funkcją dostępną w języku R
+```{r}
+t.test(dolne$Zadłużenie.gmin, opole$Zadłużenie.gmin, alternative="two.sided", var.equal=FALSE)
+```
+Widzimy więc, że otrzymujemy dokładnie takie same wartości jak ręcznie obliczone.
+\section{Zadanie nr 2}
+Macierz kontygnecji uzyskana na zajęciach to
+```{r}
+kon<-matrix(c(11,62,17,20),nrow=2,byrow=TRUE)
+```
+Prawdopodobieństwo znalezienia takiego układu lub z mniejszą wartością liczby żuków znalezionych w składach drewna przed 2000 r to
+```{r}
+phyper(11, 73, 37, 28,lower.tail = TRUE)
+```
+Wykonując teraz test Fishera zaimplementowany w jezyku R mamy
+```{r}
+fisher.test(kon,alternative = "less")
+```
+Widzimy więc, że otrzymane wyniki są takie same a hipotezę o niezależności należy odrzucić.
