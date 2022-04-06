@@ -1,0 +1,71 @@
+---
+title: "Lab5: Testowanie wielu hipotez"
+author: "Michał Ciach, Anna Macioszek"
+date: "March 15, 2020"
+output: html_document
+---
+
+Jezeli plik otwiera sie bez polskich liter, otworzcie go jeszcze raz uzywajac "Reopen with encoding" i wybierzcie UTF-8.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, include=F)
+library(ggplot2)
+```
+
+**Zadanie 2.** *(podchwytliwe).*  W danych `Zarobki.csv` znajdują się miesięczne zarobki losowo wybranych obywateli krajów A i B. 
+Wykorzystując poznane dotychczas techniki analizy danych, spróbuj odpowiedzieć na pytanie: *Obywatele którego kraju są bogatsi?*. 
+
+```{r,include=TRUE,echo=TRUE,eval=TRUE}
+data<-read.csv("Zarobki.csv",sep="\t")
+zarobki_a=data[data$Kraj=="A",2]
+zarobki_b=data[data$Kraj=="B",2]
+t.test(x=zarobki_a,y=zarobki_b,alternative="two.sided")
+```
+
+### Testowanie wielokrotne
+
+**Zadanie 3.** Zainstaluj i załaduj bibliotekę `ISLR`. Załaduj dane `Khan` za pomocą komendy `data(Khan)` (zwróć uwagę na brak cudzysłowu).  
+Dane dotyczą ekspresji genów w zależności od rodzaju nowotworu. Wyniki pomiaru ekspresji genów zapisane są w polu `Khan$xtrain`, a rodzaj nowotworu w polu `Khan$ytrain`. Więcej informacji na temat danych możesz znaleźć w dokumentacji, którą możesz wyświetlić w Rstudio wpisując w konsolę `?Khan` lub `help(Khan)`. 
+
+  - Wybierz te wiersze z macierzy `Khan$xtrain`, które odpowiadają rodzajowi 2 oraz 4, i zapisz je w dwóch macierzach.
+  - Dla każdego genu sprawdź, czy jego ekspresja zależy od rodzaju nowotworu, używając funkcji `t.test` do przeprowadzenia testu Welsha (czyli testu t Studenta dla prób o różnych wariancjach). Zapisz otrzymane p-wartości w wektorze.
+  - Przeprowadź korekcje p-wartości metodami Bonferroniego, Holma, oraz Benjamini-Hochberg. 
+```{r,include=TRUE,echo=TRUE,eval=TRUE}
+library(ISLR)
+data(Khan)
+dwa<-Khan$xtrain[which((Khan$ytrain==2)!=0),]
+cztery<-Khan$xtrain[which((Khan$ytrain==4)!=0),]
+wyniki<-sapply(1:20,(function (x)t.test(dwa[x,],cztery[x,])$p.value ))
+print(p.adjust(wyniki,method = "bonferroni"))
+print(p.adjust(wyniki,method = "hochberg"))
+print(p.adjust(wyniki,method = "holm"))
+```
+Połowa wyników wpadła do zbioru krytycznego więc 
+\\
+**Zadanie 4.** Jaką metodę korekcji p-wartości (lub jej brak) zastosowalibyśmy do poniższych zadań badawczych?
+
+  1. Chcemy znaleźć geny, które są potencjalnym celem terapii genowej, i mamy środki na kilkadziesiąt dalszych eksperymentów
+  2. Chcemy znaleźć geny, które mogą być potencjalnym celem niesamowicie drogiego eksperymentu mającego na celu przetestowanie nowej metody leczenia
+  3. Chcemy wstępnie określić, które geny mogą mieć związek z danym typem nowotworu
+  4. Chcemy ogólnie scharakteryzować, które geny mają różną ekspresję w różnych typach nowotworu
+  5. Chcemy znaleźć geny markerowe, czyli takie, które pozwolą na efektywne rozróznienie typu nowotworu 
+
+
+**Zadanie 5.** Stwórz macierz o wymiarach 10x1000, taką, że obserwacje z pierwszych stu kolumn są wylosowane z rozkładu $\mathcal{N}(1, 1)$, a z pozostałych 900 z rozkładu $\mathcal{N}(0, 1)$. Następnie:
+
+  - Dla każdej kolumn przeprowadź test t Studenta na to, czy średnia jest większa od 0, i zapisz otrzymane p-wartości w wektorze.
+  - Przeprowadź korekcje p-wartości za pomocą metod Bonferroniego, Holma, oraz Bejnamini-Hochberga, korzystając z funkcji `p.adjust`. 
+  - Obejrzyj rozkłady p-wartości oraz q-wartości (skorygowanych p-wartości) na histogramach.
+  - Zapisz oryginalne p-wartości i trzy wektory q-wartości w ramce danych lub macierzy o 4 kolumnach.
+  - Dla każdej kolumny oblicz moc testu, False Discovery Rate, False Positive Rate, accuracy oraz precision przyjmując poziom istotności 0.05. Zinterpretuj wyniki.
+```{r,include=TRUE,echo=TRUE,eval=TRUE}
+mat<-matrix(c(rnorm(1000,0,1),rnorm(9000,1,1)),nrow=10)
+pval<-apply(mat,MARGIN = 1,function (i) t.test(x=i,mu=1)$p.value)
+d<-data.frame(
+bon=p.adjust(pval,method = "bonferroni"),
+hoch=p.adjust(pval,method = "hochberg"),
+holm=p.adjust(pval,method = "holm")
+)
+ggplot(d)+geom_histogram(aes(x=hoch))+geom_histogram(aes(x=bon),fill="red")+geom_histogram(aes(x=holm),fill="white")
+```
+
