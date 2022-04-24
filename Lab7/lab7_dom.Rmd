@@ -1,0 +1,41 @@
+---
+title: "Lab nr 7"
+author: "Mateusz_Kapusta"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(dplyr)
+theme_set(theme_bw())
+library(mgcv)
+library(tidymv)
+library(patchwork)
+```
+\section{Zad 3}
+Ładujemy dane i generujemy model.
+```{r,echo=TRUE,include=TRUE,eval=TRUE}
+ais <- read.table("ais.txt", header = T)
+model<-lm(Wt~.-Sex-Sport,ais)
+summary(model)
+```
+Widzimy, że największe znaczenie w modelu ma współczynnik BMI, wysokość, chuda masa ciała oraz poziom tłuszczu w ciele.
+Aby stwierdzić który parametr ma znaczenie należy patrzeć na p-wartość, mała p-wartość sugeruje, iż zjawisko jest statystycznie ważne. Różnica pomiędzy sportowcami o tych samych parametrach oraz różnicy wzrostu $1$ cm to współczynnik $\beta$ dla wysokości wynoszący $1.984e-01$. Jest to wartość mniejsza w porównaniu do poprzedniego wyniku albowiem pozostałe parametry są ze sobą skorelowane, zwiększenie wzorstu statystycznie pociaga za soba wzrost innych parametrów od których zależy waga. Z tego powodu współczynnik musi być odpowiednio mniejszy. Czynniki genetyczne mają stosunkowo małe znaczenie ze względu na bardzo duży współczynnik dopasowania.
+\section{Zad 4}
+```{r,echo=TRUE,include=TRUE,eval=TRUE}
+ais$Sex <- factor(ais$Sex)
+modelp<-lm(Wt~(.-Sport-Sex)*Sex,ais)
+summary(modelp)
+```
+Uzyskane p-wartości sugerują, iż tylko procent tłuszczu w ciele ma wpływ na różnice wag 
+pomiędzy płciami a pozostałe parametry nie przewidują różnicy pomiędzy płciami.
+\section{Zad 5}
+```{r,echo=TRUE,include=TRUE,eval=TRUE}
+p1<-ggplot(aes(x=x1,y=y1),data=anscombe)+geom_point()+stat_smooth(method = "lm", col = "red")
+p2<-ggplot(aes(x=x2,y=y2),data=anscombe)+geom_point()+stat_smooth(method = "lm", col = "red")
+p3<-ggplot(aes(x=x3,y=y3),data=anscombe)+geom_point()+stat_smooth(method = "lm", col = "red")
+p4<-ggplot(aes(x=x4,y=y4),data=anscombe)+geom_point()+stat_smooth(method = "lm", col = "red")
+p1+p2+p3+p4+plot_layout(ncol=2)
+```
