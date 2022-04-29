@@ -1,0 +1,101 @@
+---
+title: "Lab 8 - zadanie domowe"
+author: "Mateusz Kapusta"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,eval = TRUE,include = TRUE)
+library(ggplot2)
+```
+\section{Zadanie nr 2}
+Ładujemy dane
+```{r}
+ais<-read.csv("ais.txt",sep="\t")
+model<-lm(Wt~Ht,data=ais)
+summary(model)
+plot(model, which=1)
+plot(model,which=2)
+```
+Wykres residuów w zależności od predykowanej wartości sugeruje, iż dane mają trend liniowy.
+Podsumowanie modelu skazuje, iż p-wartość dla naszych współczynników ma bardzo małą wartość co sugeruje, iż istnieją spore podstawy do stwierdzenia, iż współczynniki są statystycznie ważne. Widzimy, że residua z grubsza mają rozkład normalny za wyjątkiem dużych wartości kwantyli teoretycznych. Fakt ten sugeruje, że dla dużych wartości residuuów mamy więcej obserwacji niż się spodziewamy. 
+```{r}
+plot(model, which=3)
+```
+Widzimy też, że odchylenie standardowe residuów jest bardzo mało zależne od predykowanej masy jednakże spodziewać się należy zwiększenie przedziału ufności dla danych w środkowej części predykowanych wartości.
+```{r}
+przedzialy <- predict(model, data.frame('Ht'=floor(min(ais$Ht)):floor(max(ais$Ht))+1),
+                      interval='prediction')
+przedzialy <- data.frame(przedzialy)
+przedzialy$Ht <- floor(min(ais$Ht)):floor(max(ais$Ht))+1
+predykcja <- data.frame('Ht'=ais$Ht, 'Wt' = model$coefficients[1]+model$coefficients[2]*ais$Ht)
+ggplot()+geom_point(aes(x=Ht,y=Wt),data=ais,col="red")+geom_line(
+  aes(x=Ht,y=Wt),data=predykcja)+geom_ribbon(
+    aes(x=Ht, ymin=lwr, ymax=upr), data=przedzialy, alpha=0.2, fill='orange')
+```
+Podsumowując w powyższym modelu zarówno normalnośc residuuów, liniowość trendu, niezależność błędu jak i hemoskedastyczność są spełnione a otrzymane parametry charakteryzuje bardzo mała p-wartość. Wnioski jakie możemy wyciągnąć z analizy residuów to zwiększony przedział ufności dla środka danych.
+\section{Zadanie nr 3}
+```{r}
+ggplot()+geom_line(aes(x=Ht,y=Wt),data=predykcja)+geom_ribbon(
+  aes(x=Ht, ymin=lwr, ymax=upr), data=przedzialy, alpha=0.2, fill='orange')+geom_text(
+    aes(x=Ht,y=Wt,label=rownames(ais)),data=ais)+geom_label(
+    aes(x=Ht,y=Wt,label=rownames(ais)),data=ais)
+```
+\section{Zadanie nr 4}
+```{r}
+modelp<-lm(X.Bfat~.,data=ais)
+summary(modelp)
+plot(modelp, which=1)
+```
+Pierwszy wykres przedstawiający residuua w zależności od fitowanej wartości pozwala nam stwierdzić, że trend z bardzo dużym przbyliżeniem jest liniowy. 
+```{r}
+plot(modelp,which=2)
+```
+Wykres kwantylowy pozwla nam potwierdzić normalność błędów w bardzo dużym zakresie.
+```{r}
+plot(modelp,which=3)
+```
+Wykres zależności pierwiasta z standaryzowanych residuuów w zależności od predykowanej wartości mówi nam, że błędy jakie popełniamy są hemoskedastyczne.
+```{r}
+plot(modelp,which=5)
+```
+Ostatni wykres pozwala nam ustalić pomiary o dużej dźwigni. Na wszystkich wykresach wyraźnie widać że jedną z odstających obserwacji jest pomiar o numerze 11. Obserwacje 8,37 oraz 75 oraz 96 także pojawiają się na wykresach jako obserwacje odstajace i wykluczenie ich z danych jest warte rozważenia. 
+Przejdzmy teraz do analizy wyników regresji liniowej. Niskie wartości p wartości sugerują, iż statystyczne ważnymi zmiennymi są
+\begin{enumerate}
+\item Płeć
+\item Dyscyplina sportu jeżeli jest to
+\begin{itemize}
+\item Pływanie
+\item Bieg na 400 m
+\item Sprint
+\item Field?
+\end{itemize}
+\item waga
+\item chuda masa ciała
+\item suma grubości skóry
+\end{enumerate}
+Zauważmym że wszystkie współczynniki dla rodzaju sportu które są statystycznie ważne mają ujemne wartości. Oznacza to, że sportowcy z tych dyscyplin mają średnio mniej prcentu tłuszczu w porównaniu do kolegów z innych dyscyplin o takich samych danych. Widzimy też, że dla mężczyzn współczynnik także będzie mniejszy co spowodowane jest najprawdopodobniej faktami biologicznymi (według znalezionych danych medycznych kobiety mają średni poziom tłuszczu większy o $10\%$ większy niż u facetów).
+\section{Zadanie nr 6}
+```{r}
+tren<-ais[seq(2,nrow(ais),2),]
+test<-ais[seq(2,nrow(ais),2)-1,]
+modelk<-lm(X.Bfat~.,data=tren)
+trenerr<-sum(sapply(1:nrow(tren),function (x) 
+  (predict(modelk,tren[,-10],interval="prediction")[x]-tren[x,10])^2))/(nrow(tren))
+testerr<-sum(sapply(1:nrow(test),function (x) 
+  (predict(modelk,test[,-10],interval="prediction")[x]-test[x,10])^2))/(nrow(test))
+r1<-summary(modelk)$adj.r.squared
+```
+Testy średniokwadaratowe danych treningowych oraz testowych to odpowiednio `r trenerr` oraz `r testerr` natomiast współczynnik dopasowania $R^2$ to `r r1`.
+Teraz dla okrojonego modelu
+```{r}
+model2<-lm(X.Bfat~Sport+Sex+SSF+LBM+Wt,data=tren)
+trenerr2<-sum(sapply(1:nrow(tren),function (x) 
+  (predict(model2,tren[,-10],interval="prediction")[x]-tren[x,10])^2))/(nrow(tren))
+testerr2<-sum(sapply(1:nrow(test),function (x) 
+  (predict(model2,test[,-10],interval="prediction")[x]-test[x,10])^2))/(nrow(test))
+r2<-summary(modelk)$adj.r.squared
+
+```
+Analogiczne błedy dla okrojonego modelu to `r trenerr2`, `r testerr2` (błędy średniokwadratowe) oraz `r r2` (współczynnik $R^2$). Widzimy więc, że błęd treningowy jest większy a testowy mniejszy co zwiazane jest ze zjawiskiem overfittingu, im większa jest liczba parametrów które wykorzystujemy tym mniejszy jest bład treningowy ale testowy większy (oczywiscie w pewnych granicach tak jak u nas).
