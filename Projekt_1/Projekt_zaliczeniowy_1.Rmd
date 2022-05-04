@@ -6,11 +6,15 @@ output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE,include=TRUE,eval=TRUE)
+knitr::opts_chunk$set(echo = TRUE,include=TRUE,eval=TRUE,out.width="70%")
 library("ggplot2")
+library(GGally)
 library(dplyr)
+library(plyr)
 library(ggcorrplot)
+library(lattice)
 ```
+\section{1}
 Wpierw na samym początku wczytujemy dane, które posłużą nam do wykonania modelu.
 ```{r}
 data<-read.csv("people_tab.csv",sep="\t")
@@ -37,3 +41,97 @@ ggcorrplot(cor_matrix_jako, hc.order = TRUE, type = "upper",
    insig = "blank")
 ```
 Widzimy więc, że korelacje pomiędzy zmiennymi jakościowymi są bardzo małe. W przypadku zmiennej płeć mamy braki w danych, które na samym początku usuwamy.
+\section{2}
+```{r}
+ggpairs(data_ilo,
+        upper= list(continuous = wrap("points",color="red",size=0.1,alpha=1/10), combo = "box_no_facet"),
+        lower=list(continuous=wrap("points",color="orange",size=0.1,alpha=1/10)),
+        diag=list(continuous=wrap("barDiag",bins=20))
+        )
+```
+Wykres przedstawiający wydatki respondentów ze względu na płeć:
+```{r}
+ggplot(data)+geom_boxplot(aes(x=plec,y=wydatki),outlier.colour="red", outlier.shape=8,
+                outlier.size=4)
+```
+Widzimy, że męszczyźni średnio wydają więcej jednakże u kobiet mamy do czynienia z większym rozrzutem danych. Wykres kołowy przedstawiający rozkład osób miekszających w różnego typu budynkach:
+```{r}
+data$budynek=as.factor(data$budynek)
+temp=count(data$budynek)
+d=data.frame("val"=temp$freq,"type"=temp$x)
+ggplot(d,aes(x="",y=val,fill=type))+geom_bar(stat="identity",width=1)+coord_polar("y",start=0)+theme_void()
+```
+\section{3}
+Rozważmy teraz jaka jest p-wartość dla hipotezy, że średnia wzrostu to $m=170$ cm. Wpierw zobaczymy jak rozkłada się wzrost wśród danych przy pomocy wykresu kwantylowego.
+```{r}
+ggplot(data)+stat_qq(aes(sample=wzrost))+theme_grey()
+```
+Widzimy więc, że z bardzo dobrym przybliżeniem dane pochodzą z rozkładu normalnego. Do sprawdzenia hipotezy zerowej wystarczy wykorzystać test t-studenta.
+```{r}
+mu_hip<-170 #średnia wartość wzrostu według hipotezy zerowej
+med_hip<-165 #mediana wzorsty według hipotezy zerowej
+x<-t.test(data$wzrost,mu=mu_hip,alternative="less")
+```
+Widzimy, że p-wartość wynosi `r x$p.value` a więc na poziomie istotności $0,05$ hipotezę zerową należy odrzucić. Aby przetestować medianę wykrozystamy test $\chi^2$ Pearsona. Podzielmy wszystkie obserwację na populację mniejsza od mediany i mniejszą od mediany. W takim układzie przy $N$ obserwacjach oraz prawdziwej hipotezie zerowej że mediana rozkładu to $m$ statystyka 
+\begin{equation}
+  a=\frac{(2N_1-N)^2}{2N}+\frac{(2N_2-N)^2}{2N}
+\end{equation}
+ma rozkład $\chi^2$ z $2$ stopniami swobody gdzie $N_1$ to liczba obserwacji poniżej mediany a $N_2$ to liczba obserwacji powyżej mediany. Stąd w naszym przypadku
+```{r}
+N1 <- sum(data$wzrost<=med_hip)
+N2 <- sum(data$wzrost>med_hip)
+N <- N1+N2
+t <- (2*N1-N)^2/(2*N)+(2*N2-N)^2/(2*N)
+k <- 1-pchisq(t,df=2)
+```
+Wartość statystyki testowej to `r t` natomiast odpowiadająca jej p-wartość to `r k`. Stąd ponownie hipotezę zerową o medianie na poziomie istotności $0,05$ należy odrzucić. O ile do testu t-studenta potrzebujemy założenia o normalności rozkładu co jak widzimy z wykresu kwantylowego z dużą dokładnością jest spełnione o tyle w przypadku testu $\chi^2$ Pearsona nie potrzebujemy tego założenia.
+\section{4}
+Przejdźmy teraz do obliczenia przedziałów ufności dla parametrów na poziomie $0,99$. W przypadku średniej przedział ufności. Zanim przejdziemy na wzozy szybko rzućmy okiem na rozkład kwantylowy danych.
+```{r}
+ggplot(data)+stat_qq(aes(sample=wiek))+theme_grey()
+```
+Dane pochodzą z grubsza z rozkładu normalnego. W przypadku średniej i danych z rozkładu normalnego wiemy, że 
+\begin{equation}
+  T=\frac{X-\mu}{S\sqrt{\sigma}}
+\end{equation}
+ma rozkład t-studenta ($X$ oznacza średnią populacji a $S$ odchylenie standardowe uzyksane estymatorem nieobciążonym).
+Chcemy zbadać, jaki jest przedział ufności dla statystyki $T$. wykorzystujac funckje R mamy, że
+```{r}
+a<-0.99
+c<-qt(1-a/2,df=length(data$wiek)-1)
+```
+Jeżeli $T$ mieści się pomiędzy $c$ a $-c$ to $\mu$ musi się mieścić pomiędzy $X-\frac{cS}{\sqrt{N}}$ oraz $X+\frac{cS}{\sqrt{N}}$.
+```{r}
+up<-mean(data$wiek)+c*sd(data$wiek)/sqrt(length(data$wiek))
+down<-mean(data$wiek)-c*sd(data$wiek)/sqrt(length(data$wiek))
+```
+Stąd przedział ufności dla $\mu$ to `r up` do `r down`. W celu wyznaczenia przedziłów ufności dla wariancji wykorzystamy podobną metodę z tą różnicą, że zamiast wykrozystywać statystykę t studenta wykorzystamy statystykę $\chi^2$. Wiemy albowiem, że statystyka 
+\begin{equation}
+\frac{(N-1)S}{\sigma^2}
+\end{equation}
+ma rozkład $\chi^2$ o $N-1$ stopniach swobody. Stąd analogicznie znajdujemy wartości przedziałów dla statystyki
+```{r}
+p<-qchisq(1-a/2,df=length(data$wiek)-1)
+l<-qchisq(a/2,df=length(data$wiek)-1)
+```
+i po transformacjach znajdujemy jakie są przedziały ufności dla wariancji 
+```{r}
+N<-length(data$wiek)
+lv<-(N-1)/p*var(data$wiek)
+pv<-(N-1)/l*var(data$wiek)
+```
+Przedział ufności dla odchylenia standardowego to pierwiastek z tych granic a więc rozprzestrzenia się od `r sqrt(lv)` do `r sqrt(pv)`.
+\section{5}
+\subsection{1}
+\subsection{2}
+\subsection{3}
+Zbadajmy, czy stan cywilny jest niezależny od liczby dzieci. W tym celu wykorzystamy dokładny test Fishera. Wpierw musimy znaleźć macierz mówiącą nam, ile razy sklasyfikowane zostały poszczególne obserwacje razy.
+```{r}
+a<-nrow(data[data$stan_cywilny==TRUE & data$plec=="M",]) # żonaci mężczyźni
+b<-nrow(data[data$stan_cywilny==FALSE & data$plec=="M",]) #mężczyźni singlowie
+c<-nrow(data[data$stan_cywilny==FALSE & data$plec=="K",]) # samotne kobiety
+d<-nrow(data[data$stan_cywilny==TRUE & data$plec=="K",]) # zamężne kobiety
+mat<-matrix(c(a,b,d,c),ncol=2,byrow=TRUE)
+x<-fisher.test(mat)
+```
+p-wartość naszego testu to `r x$p.val` a więc na żądanym poziomie istotności nie można stwierdzić, że istnieje zależność pomiędzy płcią a stanem cywilnym.
