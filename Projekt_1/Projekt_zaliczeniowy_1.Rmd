@@ -6,7 +6,7 @@ output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE,include=TRUE,eval=TRUE,out.width="70%")
+knitr::opts_chunk$set(echo = TRUE,include=TRUE,eval=TRUE,out.width="75%")
 library("ggplot2")
 library(GGally)
 library(dplyr)
@@ -15,12 +15,12 @@ library(ggcorrplot)
 library(lattice)
 ```
 \section{1}
-Wpierw na samym początku wczytujemy dane, które posłużą nam do wykonania modelu.
+Na samym początku wczytujemy dane, które posłużą nam do wykonania modelu.
 ```{r}
 data<-read.csv("people_tab.csv",sep="\t")
 num<-lapply(data,is.numeric)
 ```
-Dane składają się z `r nrow(data)` obserwacji natomiast każda obserwacja liczy sobie `r ncol(data)` parametrów z czego $ncol(data)-sum(num)$ to parametry jakościowe. W celu zbadaniu korelacji pomiędzy zmiennymi znajdujemy macierz korelacji metodą Pearsona.
+Dane składają się z `r nrow(data)` obserwacji natomiast każda obserwacja liczy sobie `r ncol(data)` parametrów z czego `r ncol(data)-sum(unlist(num))` to parametry jakościowe. W celu zbadaniu korelacji pomiędzy zmiennymi znajdujemy macierz korelacji metodą Pearsona.
 ```{r}
 data_ilo<-data[unlist(num)]
 cor_matrix<-cor(data_ilo)
@@ -30,17 +30,17 @@ ggcorrplot(cor_matrix, hc.order = TRUE, type = "upper",
    colors = c("#6D9EC1", "white", "#E46726"),
    insig = "blank")
 ```
-Widzimy, że największe dodatnie korelacje zachodzą pomiędzy wiekiem a oszczędnościami, wydatkami a liczbą dzieci oraz wzrostem a wagą. Brakuje natomiast nam silnych ujemnych korelacji pomiędzy danymi. Teraz zbadajmy korelacje pomiędzy zmiennymi jakościowymi.
+\par\
+Widzimy, że największe dodatnie korelacje zachodzą pomiędzy wiekiem a oszczędnościami, wydatkami a liczbą dzieci oraz wzrostem a wagą. Brakuje natomiast nam silnych ujemnych korelacji pomiędzy danymi. Teraz zbadajmy korelacje pomiędzy zmiennymi jakościowymi. Do tego celu wykorzystamy korelację polichoryczną z pakietu polycor.
 ```{r}
+library(polycor)
 data_jako<-na.omit(data[!unlist(num)]) #usuwamy pola bez wartości
-cor_matrix_jako<-cor(data.frame(lapply(data_jako,function (x) as.integer(as.factor(x)))))
-ggcorrplot(cor_matrix_jako, hc.order = TRUE, type = "upper",
-   outline.col = "white",
-   ggtheme = ggplot2::theme_grey,
-   colors = c("#6D9EC1", "white", "#E46726"),
-   insig = "blank")
+c1<-polychor(data_jako$budynek,data_jako$plec)
+c2<-polychor(data_jako$budynek,data_jako$stan_cywilny)
+c3<-polychor(data_jako$stan_cywilny,data_jako$plec)
 ```
-Widzimy więc, że korelacje pomiędzy zmiennymi jakościowymi są bardzo małe. W przypadku zmiennej płeć mamy braki w danych, które na samym początku usuwamy.
+\par\
+Korelacje pomiędzy parami zmiennych budynek-płeć, budynek-stan cywilny, stan cywilny-płeć wynoszą kolejno `r c1`,\space`r c2`,\space `r c3`. W przypadku zmiennej płeć mamy braki w danych, które na samym początku usuwamy.
 \section{2}
 ```{r}
 ggpairs(data_ilo,
@@ -49,53 +49,59 @@ ggpairs(data_ilo,
         diag=list(continuous=wrap("barDiag",bins=20))
         )
 ```
+\par\
 Wykres przedstawiający wydatki respondentów ze względu na płeć:
 ```{r}
 ggplot(data)+geom_boxplot(aes(x=plec,y=wydatki),outlier.colour="red", outlier.shape=8,
                 outlier.size=4)
 ```
+\par\
 Widzimy, że męszczyźni średnio wydają więcej jednakże u kobiet mamy do czynienia z większym rozrzutem danych. Wykres kołowy przedstawiający rozkład osób miekszających w różnego typu budynkach:
 ```{r}
 data$budynek=as.factor(data$budynek)
 temp=count(data$budynek)
 d=data.frame("val"=temp$freq,"type"=temp$x)
-ggplot(d,aes(x="",y=val,fill=type))+geom_bar(stat="identity",width=1)+coord_polar("y",start=0)+theme_void()
+ggplot(d,aes(x="",y=val,fill=type))+
+  geom_bar(stat="identity",width=1)+
+  coord_polar("y",start=0)+
+  theme_void()
+```
+\par\
+Na koniec sprawdźmy jak rozkłada się liczba dzieci pośród naszych respondentów z podziałem na płeć.
+```{r}
+ggplot(data, aes(x = liczba_dzieci, fill = plec)) +                      
+  geom_histogram(position = "dodge", alpha = 0.7, bins = 20)+
+  theme_minimal()
 ```
 \section{3}
 Rozważmy teraz jaka jest p-wartość dla hipotezy, że średnia wzrostu to $m=170$ cm. Wpierw zobaczymy jak rozkłada się wzrost wśród danych przy pomocy wykresu kwantylowego.
 ```{r}
 ggplot(data)+stat_qq(aes(sample=wzrost))+theme_grey()
 ```
-Widzimy więc, że z bardzo dobrym przybliżeniem dane pochodzą z rozkładu normalnego. Do sprawdzenia hipotezy zerowej wystarczy wykorzystać test t-studenta.
+\par\
+Widzimy więc, że z bardzo dobrym przybliżeniem dane pochodzą z rozkładu normalnego. Do sprawdzenia hipotezy zerowej wystarczy wykorzystać test t-studenta. Hipotezą zerową jest to, że dane pochodzą z rozkładu normalnego o średniej $170$ cm natomiast hipotezą alternatywną że średnia jest mniejsza.
 ```{r}
 mu_hip<-170 #średnia wartość wzrostu według hipotezy zerowej
 med_hip<-165 #mediana wzorsty według hipotezy zerowej
 x<-t.test(data$wzrost,mu=mu_hip,alternative="less")
 ```
-Widzimy, że p-wartość wynosi `r x$p.value` a więc na poziomie istotności $0,05$ hipotezę zerową należy odrzucić. Aby przetestować medianę wykrozystamy test $\chi^2$ Pearsona. Podzielmy wszystkie obserwację na populację mniejsza od mediany i mniejszą od mediany. W takim układzie przy $N$ obserwacjach oraz prawdziwej hipotezie zerowej że mediana rozkładu to $m$ statystyka 
-\begin{equation}
-  a=\frac{(2N_1-N)^2}{2N}+\frac{(2N_2-N)^2}{2N}
-\end{equation}
-ma rozkład $\chi^2$ z $2$ stopniami swobody gdzie $N_1$ to liczba obserwacji poniżej mediany a $N_2$ to liczba obserwacji powyżej mediany. Stąd w naszym przypadku
+Widzimy, że p-wartość wynosi `r x$p.value` a więc na poziomie istotności $0,05$ hipotezę zerową należy odrzucić. Aby przetestować medianę wykrozystamy test jednopopulacyjny Wilcoxona. 
 ```{r}
-N1 <- sum(data$wzrost<=med_hip)
-N2 <- sum(data$wzrost>med_hip)
-N <- N1+N2
-t <- (2*N1-N)^2/(2*N)+(2*N2-N)^2/(2*N)
-k <- 1-pchisq(t,df=2)
+y<-wilcox.test(data$wzrost,mu=med_hip)
 ```
-Wartość statystyki testowej to `r t` natomiast odpowiadająca jej p-wartość to `r k`. Stąd ponownie hipotezę zerową o medianie na poziomie istotności $0,05$ należy odrzucić. O ile do testu t-studenta potrzebujemy założenia o normalności rozkładu co jak widzimy z wykresu kwantylowego z dużą dokładnością jest spełnione o tyle w przypadku testu $\chi^2$ Pearsona nie potrzebujemy tego założenia.
+Odpowiadająca testow p-wartość to `r y$p.value`  a więc na poziomie istotności $0,05$ należy odrzucić hipotezę zerową.
 \section{4}
-Przejdźmy teraz do obliczenia przedziałów ufności dla parametrów na poziomie $0,99$. W przypadku średniej przedział ufności. Zanim przejdziemy na wzozy szybko rzućmy okiem na rozkład kwantylowy danych.
+Przejdźmy teraz do obliczenia przedziałów ufności dla parametrów na poziomie $0,99$. Zanim przejdziemy na wzozy szybko rzućmy okiem na rozkład kwantylowy danych.
 ```{r}
 ggplot(data)+stat_qq(aes(sample=wiek))+theme_grey()
 ```
+\par\
 Dane pochodzą z grubsza z rozkładu normalnego. W przypadku średniej i danych z rozkładu normalnego wiemy, że 
 \begin{equation}
-  T=\frac{X-\mu}{S\sqrt{\sigma}}
+  T=\frac{X-\mu}{S}\sqrt{N}
 \end{equation}
 ma rozkład t-studenta ($X$ oznacza średnią populacji a $S$ odchylenie standardowe uzyksane estymatorem nieobciążonym).
-Chcemy zbadać, jaki jest przedział ufności dla statystyki $T$. wykorzystujac funckje R mamy, że
+Chcemy zbadać, jaki jest przedział ufności dla statystyki $T$. wykorzystujac funkcje R mamy, że
 ```{r}
 a<-0.99
 c<-qt(1-a/2,df=length(data$wiek)-1)
@@ -105,7 +111,7 @@ Jeżeli $T$ mieści się pomiędzy $c$ a $-c$ to $\mu$ musi się mieścić pomi�
 up<-mean(data$wiek)+c*sd(data$wiek)/sqrt(length(data$wiek))
 down<-mean(data$wiek)-c*sd(data$wiek)/sqrt(length(data$wiek))
 ```
-Stąd przedział ufności dla $\mu$ to `r up` do `r down`. W celu wyznaczenia przedziłów ufności dla wariancji wykorzystamy podobną metodę z tą różnicą, że zamiast wykrozystywać statystykę t studenta wykorzystamy statystykę $\chi^2$. Wiemy albowiem, że statystyka 
+Stąd przedział ufności dla $\mu$ to `r up` do `r down`. W celu wyznaczenia przedziałów ufności dla wariancji wykorzystamy podobną metodę z tą różnicą, że zamiast wykorzystywać statystykę t studenta wykorzystamy statystykę $\chi^2$. Wiemy albowiem, że statystyka 
 \begin{equation}
 \frac{(N-1)S}{\sigma^2}
 \end{equation}
@@ -114,18 +120,54 @@ ma rozkład $\chi^2$ o $N-1$ stopniach swobody. Stąd analogicznie znajdujemy wa
 p<-qchisq(1-a/2,df=length(data$wiek)-1)
 l<-qchisq(a/2,df=length(data$wiek)-1)
 ```
-i po transformacjach znajdujemy jakie są przedziały ufności dla wariancji 
+i po transformacjach znajdujemy jakie są przedziały ufności dla wariancji:
 ```{r}
 N<-length(data$wiek)
 lv<-(N-1)/p*var(data$wiek)
 pv<-(N-1)/l*var(data$wiek)
 ```
-Przedział ufności dla odchylenia standardowego to pierwiastek z tych granic a więc rozprzestrzenia się od `r sqrt(lv)` do `r sqrt(pv)`.
+.Przedział ufności dla odchylenia standardowego to pierwiastek z tych granic a więc rozprzestrzenia się od `r sqrt(lv)` do `r sqrt(pv)`. Aby zbadać przedziały ufności dla kwantyli wykorzystajmy metodę dokładną przeszukującą wektor obserwacji nie zakłądając symetryczności rozkładu zaimplementowaną w bibliotecie MKmisc.
+```{r}
+library(MKmisc)
+kwant<-c(1/4,1/2,3/4)
+przed<-sapply(kwant,quantileCI,x=data$wiek, conf.level = a, method = "exact",minLength = TRUE)
+przed<-sapply(0:2,\(x) przed[[3*x+2]])
+```
+Otrzymane przedziały dla naszych kwantyli to kolejno `r przed[1,1]`-`r przed[2,1]`, `r przed[1,2]`-`r przed[2,2]`, `r przed[1,3]`-`r przed[2,3]`
 \section{5}
 \subsection{1}
+Sprawdźmy, czy różnica pomiędzy wydatkami osób w związku małżeńskim a singlami jest statystycznie różna. Wpierw przygotujmy dane i sprawdzimy czy pochodzą one z rozkładu normalnego wykorzystując wykres kwantylowy.
+```{r}
+a<-0.01
+marriage<-data$wydatki[data$stan_cywilny]
+single<-data$wydatki[!data$stan_cywilny]
+ggplot()+stat_qq(aes(sample=marriage),data=data.frame("marriage"=marriage))+
+  stat_qq(aes(sample=single),color="red",data=data.frame("single"=single))+theme_grey()
+```
+\par\
+Ponieważ obie zmienne w przybliżeniu pochodzą z rokładu normalnego co objawia się ładną zależnością liniową danych na wykresie kwantylowym to wykorzystamy test t studenta dla dwóch populacji o różnej wariancji (test Welsha). Według hipotezy zerowej zarobki w obu populacjach są identyczne.
+```{r}
+test_t<-t.test(marriage,single,var.equal=FALSE)
+```
+$p$-wartość dla naszego testu to `r test_t$p.value` co przy poziomie istotności `r a` sugeruje że istnieje znaczna różnica pomiędzy danymi i hipotezę zerową należy odrzucić. Możemy zwizualizować nasze dane:
+```{r}
+ggplot(data)+geom_boxplot(aes(x=stan_cywilny,y=wydatki),outlier.colour="red", outlier.shape=8,
+                outlier.size=4)
+```
+\par\
+Jedyny wykorzystanym założeniem jest normalnośc obu populacji co jak widzimy jest dobrze spełnione.
 \subsection{2}
+Zastanówmy się, czy istnieje zależnośc pomiędzy wydatkami oraz oszczędnościami. W tym celu skorzystamy z testu $\rho$ Spearmana. Policzmy współczynnik korelacji. Według hipotezy zerowej zmienne te są nieskorelowane. 
+```{r}
+p<-cor(data$wydatki,data$oszczednosci,method="spearman")
+```
+Jak wiemy gdy mamy korelację $\rho$ to dąży ona do rozkładu normalnego z odchyleniem standardowym $\sigma=\frac{1}{\sqrt{n-1}}$. Stąd dla poziomu istotności `r a` zbiór krytyczny może zostać obliczony przy pomocy klasycznych wzorów na zbiór krytyczny dla rozkładu normalnego.
+```{r}
+critical<-qnorm(1-a/2,sd=1/sqrt(length(data$wydatki)-1))
+```
+Ponieważ wartość korelacji wynosi `r p` a granica naszego zbioru krytycznego to $\pm$ `r critical` to widzimy, że na rządanym poziomie istotności nie możemy odrzucić hipotezy zerowej o niezależności wydatków od oszczędności. 
 \subsection{3}
-Zbadajmy, czy stan cywilny jest niezależny od liczby dzieci. W tym celu wykorzystamy dokładny test Fishera. Wpierw musimy znaleźć macierz mówiącą nam, ile razy sklasyfikowane zostały poszczególne obserwacje razy.
+Zbadajmy, czy stan cywilny jest niezależny od płci, według hipotezy zerowej zmienne te są niezależne. W tym celu wykorzystamy dokładny test Fishera, który nie wymaga od danych rzadnych dodatkowych założeń. Wpierw musimy znaleźć macierz mówiącą nam, ile razy sklasyfikowane zostały poszczególne obserwacje.
 ```{r}
 a<-nrow(data[data$stan_cywilny==TRUE & data$plec=="M",]) # żonaci mężczyźni
 b<-nrow(data[data$stan_cywilny==FALSE & data$plec=="M",]) #mężczyźni singlowie
@@ -135,3 +177,89 @@ mat<-matrix(c(a,b,d,c),ncol=2,byrow=TRUE)
 x<-fisher.test(mat)
 ```
 p-wartość naszego testu to `r x$p.val` a więc na żądanym poziomie istotności nie można stwierdzić, że istnieje zależność pomiędzy płcią a stanem cywilnym.
+\subsection{4}
+Sprawdźmy, czy prawdą jest że liczba dzieci pochodzi z rozkładu geometrycznego o parametrze prawdopodobieństwa $p=$ `r 1/mean(data$liczba_dzieci[data$liczba_dzieci>0])*0.92` który jest przycięty od jeden do sześciu (prawadopodobieństwo proporcjonalne do $(1-p)^{(x-1)}$). Liczba ta jest nieprzypadkowa i bierze się ona z faktu, że gdyby dane pochodziły ze zwykłego rozkładu geometrycznego to odwrotność wartości oczekiwanej równa się $p$ a więc estymujemy $p$ jako odwrotność średniej z danych (ponieważ rozkład jest ucięty zmniejszamy tą wartość o $8\%$). Wpierw napiszmy funkcję która pozwoli na odpowiednie samplowanie oraz zwróci gęstość prawdopodobieństwa.
+```{r}
+dtran_geom<-function(x,p,dol,up)
+{
+  suma<-sum(sapply(dol:up,\(c) (1-p)^(c-1)))
+  (1-p)^(x-1)/suma
+}
+
+rtran_geom<-function(n,p,dol,up)
+{
+  out<-rep(0,n)
+  i<-1
+  while (i<=n)
+  {
+    t<-rgeom(1,p)
+    if (t>=dol & t<=up)
+    {
+      out[i]<-t
+      i<-i+1
+    }
+  }
+  out
+}
+```
+Kiedy mamy zdefiniowane nasze rozkłady to możemy wykorzystać test $\chi^2$ zgodności z rozkładem. Mamy 6 kategorii i stąd 
+```{r}
+p<-1/mean(data$liczba_dzieci[data$liczba_dzieci>0])*0.92
+liczba<-length(data$liczba_dzieci[data$liczba_dzieci>0])
+t<-sum(sapply(1:6,\(x) (length(data$liczba_dzieci[data$liczba_dzieci==x])
+                        -dtran_geom(x,p,1,6)*liczba)^2/(dtran_geom(x,p,1,6)*liczba)))
+observed<-sapply(1:6,\(x) length(data$liczba_dzieci[data$liczba_dzieci==x]))
+theoretical<-sapply(1:6,\(x) dtran_geom(x,p,1,6))
+test<-chisq.test(x=observed,
+                 p=theoretical,
+                 correct=TRUE)
+```
+. Otrzymana tą drogą p-wartość to `r test$p.value` co sugeruje, iż hipotezy zerowej nie powinniśmy odrzucić na rządanym poziomie istotności. Na koniec zobaczmy jak wygląda histogram liczby dzieci wraz z porównaniem z rozkładem prawdopodobieństwa.
+```{r}
+library(reshape2)
+simple<-list("symulowane"=rtran_geom(liczba,p,1,6),"obserwowane"=data$liczba_dzieci)
+ggplot(melt(simple), aes(value, fill = L1)) + 
+geom_histogram(position = "dodge", bins=15) +
+  xlim(0,7)
+```
+\par\
+Widzimy więc, że model przeszacowuje liczbę dzieci dla małżeństw z jednym dzieckiem natomiast w pozostałych przypadkach zachowuje się z grubsza dobrze.
+\section{6}
+Stwórzmy podstawowy model, wykorzystujący wszystkie zmienne do objaśnienia oszczędności.
+```{r}
+model<-lm(oszczednosci~.,data=data)
+summary(model)
+```
+Widzimy, że $p$-wartości odpowiadające poszczególnym parametrom są bardzo małe za wyjątkiem współczynników odpowiadających płci oraz stanu cywilnego. Skonstruujmy nowy model w którym wykorzystamy wszystkie współczynniki poza jednym i zbadamy jak zmieniają się parametry. Poniższy fragment kodu kolejno wyświetla nazwę zmiennej, jaki jest parametr $R^2$ bez tej zmiennej oraz jaki jest $RSS$ bez niej.
+```{r}
+for (name in colnames(data)[1:8])
+{
+  modelp<-lm(paste("oszczednosci~.-",name),data=data)
+  print(c(name, summary(modelp)$r.squared,deviance(modelp)))
+}
+```
+Widzimy wyraźnie, że wyeliminowanie płci lub stanu cywilnego daje najmniejszą zmianę współczynników (oraz odpowiadają im największe p-wartości). Dlatego też podjęto dezycję o wyeliminowaniu płci. W sten sposób otrzymujemy nowy model.
+```{r}
+modelprim<-lm(oszczednosci~.-plec,data=data)
+```
+W celu zbadania założeń LINE zbadajmy wykresy diagnostyczne. 
+```{r}
+plot(modelprim, which=1)
+```
+\par\
+Wykres residuów w zależności od dopasowywanej wartości pokazuje nam, że trend z bardzo dużą dokładnością jest liniowy i nie potrzebuje on jakichkolwiek przekształceń aby był doprze opisywany przez zależność liniową.
+```{r}
+plot(modelprim, which=2)
+```
+\par\
+Wykres kwantylowy dla naszych residuów także pokazuje, że z bardzo dużą dokładnością nasze residua pochodzą z rozkładu normalnego.
+```{r}
+plot(modelprim,which=3)
+```
+\par\
+Wykres zależności pierwiasta z standaryzowanych residuuów w zależności od predykowanej wartości mówi nam, że błędy jakie popełniamy są hemoskedastyczne.
+```{r}
+plot(modelprim,which=5)
+```
+\par\
+Ostatni wykres pozwala zidentyfikować obserwacje o dużej dźwigni. Wykres pozwala ustalić, że pomiary o numerach 440, 230 oraz 296 mają nadzwyczejnie duże odchylenie i można rozważyć ich usunięcie albowiem mają dośc duży wpływ na współczynniki. Widzimy więc że dane dobrze opisywane są przez model liniowy a wszystkie założenia modelu liniowego są spełnione w naszej sytuacji. 
