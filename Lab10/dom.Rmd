@@ -1,0 +1,61 @@
+---
+title: "Lab 10- Zadanie domowe"
+author: "Mateusz Kapusta"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,include = TRUE,eval = TRUE)
+library(ggplot2)
+library(caret)
+library(caTools)
+library(MASS)
+library(boot)
+biopsy <- na.omit(biopsy)
+biopsy$ID<-NULL
+```
+\section{Zadanie nr 2}
+```{r}
+model<-glm(class~.,data=biopsy, family="binomial")
+t<-stepAIC(model,trace=TRUE,direction="both",scope = list(upper = ~., lower = ~1))
+tp<-stepAIC(model,trace=TRUE,direction="both",scope = list(upper = ~., lower = ~1),k=log(nrow(biopsy)))
+k=15
+name<-paste0(names(tp$coefficients)[2:length(tp$coefficients)],sep="+",collapse = "")
+name<-substr(name,1,nchar(name)-1)
+train_control <- trainControl(method='cv', number=k)
+tppred <- train(as.formula(paste("class~",name)), data=biopsy, 
+                     method='glm', family=binomial, trControl=train_control)
+wyntp<-tppred$results["Accuracy"]
+name<-paste0(names(t$coefficients)[2:length(t$coefficients)],sep="+",collapse = "")
+name<-substr(name,1,nchar(name)-1)
+train_control <- trainControl(method='cv', number=k)
+tpred <- train(as.formula(paste("class~",name)), data=biopsy, 
+                     method='glm', family=binomial, trControl=train_control)
+wynt<-tpred$results["Accuracy"]
+```
+Średnia dokładnośc modelu wytrenowanego sugerując się maksymalizacją AIC to `r wynt` natomiast BIC `r wyntp` czyli oba modele różnią się tylko minimalnie.
+\section{Zadanie nr 3}
+```{r}
+fun<-function(dane,indeksy)
+{
+  sum(sapply(indeksy, \(x) dane[x,]/length(indeksy)))
+}
+
+wyn<-numeric(1000)
+d<-read.csv("walter.csv")
+for (i in 1:1000)
+{
+  x<-sample(1:nrow(d),replace=TRUE)
+  wyn[i]<-fun(d,x)
+}
+ggplot(data=data.frame("mean"=wyn))+stat_qq(aes(sample=mean))+stat_qq_line(aes(sample=mean))
+
+```
+Widzimy, że rozkład średniej jest normalny albowiem dane dobrze leżą na lini prostej na wykresie kwantylowym. Teraz porównujemy to z funkcją boot.
+```{r}
+wynp<-boot(d,fun,1000)
+wynp
+ggplot(data=data.frame("mean"=wynp$t))+stat_qq(aes(sample=mean))+stat_qq_line(aes(sample=mean))
+```
+Tak jak w przypadku ręcznego bootstrapu widizmy, że dane pochodza z grubsza z rozkładu normalnego i przypominają te wykonane ręcznie.

@@ -1,0 +1,14 @@
+---
+title: "Projekt Zaliczeniowy nr 2"
+author: "Mateusz Kapusta"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,eval=TRUE,include=TRUE)
+library(MASS)
+library(ggplot2)
+library(caret)
+library(glmnet)
+```

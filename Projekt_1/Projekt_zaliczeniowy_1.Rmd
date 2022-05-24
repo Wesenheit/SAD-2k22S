@@ -52,24 +52,26 @@ ggpairs(data_ilo,
 \par\
 Wykres przedstawiający wydatki respondentów ze względu na płeć:
 ```{r}
-ggplot(data)+geom_boxplot(aes(x=plec,y=wydatki),outlier.colour="red", outlier.shape=8,
+ggplot(na.omit(data))+geom_boxplot(aes(x=plec,y=wydatki),outlier.colour="red", outlier.shape=8,
                 outlier.size=4)
 ```
 \par\
 Widzimy, że męszczyźni średnio wydają więcej jednakże u kobiet mamy do czynienia z większym rozrzutem danych. Wykres kołowy przedstawiający rozkład osób miekszających w różnego typu budynkach:
 ```{r}
 data$budynek=as.factor(data$budynek)
-temp=count(data$budynek)
-d=data.frame("val"=temp$freq,"type"=temp$x)
+temp=count(data$budynek) #korzystamy z bublioteki plyr
+d=data.frame("val"=temp$freq,"type"=temp$x,"labels"=paste0(temp$freq/sum(temp$freq)*100,"%"))
 ggplot(d,aes(x="",y=val,fill=type))+
   geom_bar(stat="identity",width=1)+
   coord_polar("y",start=0)+
+  geom_text(aes(label = labels),
+            position = position_stack(vjust = 0.5)) +
   theme_void()
 ```
 \par\
 Na koniec sprawdźmy jak rozkłada się liczba dzieci pośród naszych respondentów z podziałem na płeć.
 ```{r}
-ggplot(data, aes(x = liczba_dzieci, fill = plec)) +                      
+ggplot(na.omit(data), aes(x = liczba_dzieci, fill = plec)) +                      
   geom_histogram(position = "dodge", alpha = 0.7, bins = 20)+
   theme_minimal()
 ```
@@ -85,13 +87,18 @@ mu_hip<-170 #średnia wartość wzrostu według hipotezy zerowej
 med_hip<-165 #mediana wzorsty według hipotezy zerowej
 x<-t.test(data$wzrost,mu=mu_hip,alternative="less")
 ```
-Widzimy, że p-wartość wynosi `r x$p.value` a więc na poziomie istotności $0,05$ hipotezę zerową należy odrzucić. Aby przetestować medianę wykrozystamy test jednopopulacyjny Wilcoxona. 
+Widzimy, że p-wartość wynosi `r x$p.value` a więc na poziomie istotności $0,05$ hipotezę zerową należy odrzucić. Aby przetestować medianę wykrozystamy test jednopopulacyjny Wilcoxona. Niech na moment alternatywą będzie to, że mediana jest inna. Wtedy
 ```{r}
 y<-wilcox.test(data$wzrost,mu=med_hip)
 ```
-Odpowiadająca testow p-wartość to `r y$p.value`  a więc na poziomie istotności $0,05$ należy odrzucić hipotezę zerową.
+.Odpowiadająca testow p-wartość to `r y$p.value`  a więc na poziomie istotności $0,05$ należy odrzucić hipotezę zerową.
+Jeżeli chcemy sprawdzić czy mediana jest mniejsza od `r med_hip` skorzystamy z testu jednostronnego.
+```{r}
+y<-wilcox.test(data$wzrost,mu=med_hip,alternative="less")
+```
+W tym przypadku nasza p-wartośc to `r y$p.value` a więc hipotezy nie należy odrzucić. W rzeczywistości widzimy, że mediana rozkładu jest zdecydowanie większa niż `r med_hip`.
 \section{4}
-Przejdźmy teraz do obliczenia przedziałów ufności dla parametrów na poziomie $0,99$. Zanim przejdziemy na wzozy szybko rzućmy okiem na rozkład kwantylowy danych.
+Przejdźmy teraz do obliczenia przedziałów ufności dla parametrów na poziomie $0,99$. Zanim przejdziemy do wzorów szybko rzućmy okiem na rozkład kwantylowy danych.
 ```{r}
 ggplot(data)+stat_qq(aes(sample=wiek))+theme_grey()
 ```
@@ -103,7 +110,7 @@ Dane pochodzą z grubsza z rozkładu normalnego. W przypadku średniej i danych 
 ma rozkład t-studenta ($X$ oznacza średnią populacji a $S$ odchylenie standardowe uzyksane estymatorem nieobciążonym).
 Chcemy zbadać, jaki jest przedział ufności dla statystyki $T$. wykorzystujac funkcje R mamy, że
 ```{r}
-a<-0.99
+a<-0.01
 c<-qt(1-a/2,df=length(data$wiek)-1)
 ```
 Jeżeli $T$ mieści się pomiędzy $c$ a $-c$ to $\mu$ musi się mieścić pomiędzy $X-\frac{cS}{\sqrt{N}}$ oraz $X+\frac{cS}{\sqrt{N}}$.
@@ -126,14 +133,14 @@ N<-length(data$wiek)
 lv<-(N-1)/p*var(data$wiek)
 pv<-(N-1)/l*var(data$wiek)
 ```
-.Przedział ufności dla odchylenia standardowego to pierwiastek z tych granic a więc rozprzestrzenia się od `r sqrt(lv)` do `r sqrt(pv)`. Aby zbadać przedziały ufności dla kwantyli wykorzystajmy metodę dokładną przeszukującą wektor obserwacji nie zakłądając symetryczności rozkładu zaimplementowaną w bibliotecie MKmisc.
+.Przedział ufności dla odchylenia standardowego to pierwiastek z tych granic a więc rozprzestrzenia się od `r sqrt(lv)` do `r sqrt(pv)`. Aby zbadać przedziały ufności dla kwantyli wykorzystajmy metodę dokładną przeszukującą wektor obserwacji nie zakładając symetryczności rozkładu zaimplementowaną w bibliotecie MKmisc (polecaną przez autorów artukułu podlinkowanego w treści zadania zaliczeniowego).
 ```{r}
 library(MKmisc)
 kwant<-c(1/4,1/2,3/4)
-przed<-sapply(kwant,quantileCI,x=data$wiek, conf.level = a, method = "exact",minLength = TRUE)
+przed<-sapply(kwant,quantileCI,x=data$wiek, conf.level = 1-a, method = "exact",minLength = TRUE)
 przed<-sapply(0:2,\(x) przed[[3*x+2]])
 ```
-Otrzymane przedziały dla naszych kwantyli to kolejno `r przed[1,1]`-`r przed[2,1]`, `r przed[1,2]`-`r przed[2,2]`, `r przed[1,3]`-`r przed[2,3]`
+Otrzymane przedziały dla naszych kwantyli to kolejno `r przed[1,1]`-`r przed[2,1]`, `r przed[1,2]`-`r przed[2,2]`, `r przed[1,3]`-`r przed[2,3]`. Obliczenie przedziałów ufności dla średniej oraz odchylenia standardowego został obliczony przy założeniu, że zmienna wiek ma rozkład normalny co jak widać z wykresu kwantylowego jest sensownym założeniem.
 \section{5}
 \subsection{1}
 Sprawdźmy, czy różnica pomiędzy wydatkami osób w związku małżeńskim a singlami jest statystycznie różna. Wpierw przygotujmy dane i sprawdzimy czy pochodzą one z rozkładu normalnego wykorzystując wykres kwantylowy.
@@ -155,17 +162,13 @@ ggplot(data)+geom_boxplot(aes(x=stan_cywilny,y=wydatki),outlier.colour="red", ou
                 outlier.size=4)
 ```
 \par\
-Jedyny wykorzystanym założeniem jest normalnośc obu populacji co jak widzimy jest dobrze spełnione.
+Jedyny wykorzystanym założeniem jest normalność obu populacji co jak widzimy jest dobrze spełnione.
 \subsection{2}
-Zastanówmy się, czy istnieje zależnośc pomiędzy wydatkami oraz oszczędnościami. W tym celu skorzystamy z testu $\rho$ Spearmana. Policzmy współczynnik korelacji. Według hipotezy zerowej zmienne te są nieskorelowane. 
+Zastanówmy się, czy istnieje zależność pomiędzy wydatkami oraz oszczędnościami. W tym celu skorzystamy z testu $\rho$ Spearmana. Policzmy współczynnik korelacji. Według hipotezy zerowej zmienne te są nieskorelowane. 
 ```{r}
-p<-cor(data$wydatki,data$oszczednosci,method="spearman")
+p<-cor.test(data$wydatki,data$oszczednosci,method="spearman",exact=FALSE)
 ```
-Jak wiemy gdy mamy korelację $\rho$ to dąży ona do rozkładu normalnego z odchyleniem standardowym $\sigma=\frac{1}{\sqrt{n-1}}$. Stąd dla poziomu istotności `r a` zbiór krytyczny może zostać obliczony przy pomocy klasycznych wzorów na zbiór krytyczny dla rozkładu normalnego.
-```{r}
-critical<-qnorm(1-a/2,sd=1/sqrt(length(data$wydatki)-1))
-```
-Ponieważ wartość korelacji wynosi `r p` a granica naszego zbioru krytycznego to $\pm$ `r critical` to widzimy, że na rządanym poziomie istotności nie możemy odrzucić hipotezy zerowej o niezależności wydatków od oszczędności. 
+p-wartość odpowiadająca naszemu testowi to `r p$p.value`  więc na poziomie $0,05$ nie możemy odrzucić hipotezy zerowej. Korelacja $\rho$ Spearmana mierzy nam czy pomiędzy zmiennymi istnieje korelacja monotoniczna (w jedną stronę lub nie) w przeciwieństwie do korelacji Pearsona mierzacej liniowość relacji. Pakiet R wykorzystuje asymptotyczną zbieżność do rozkładu t odpowiedniej statystyki co daje tym lepsze wyniki im więcej danych wykorzystujemy co przy $500$ obserwacjach powinno dać dobre wyniki.
 \subsection{3}
 Zbadajmy, czy stan cywilny jest niezależny od płci, według hipotezy zerowej zmienne te są niezależne. W tym celu wykorzystamy dokładny test Fishera, który nie wymaga od danych rzadnych dodatkowych założeń. Wpierw musimy znaleźć macierz mówiącą nam, ile razy sklasyfikowane zostały poszczególne obserwacje.
 ```{r}
@@ -178,7 +181,7 @@ x<-fisher.test(mat)
 ```
 p-wartość naszego testu to `r x$p.val` a więc na żądanym poziomie istotności nie można stwierdzić, że istnieje zależność pomiędzy płcią a stanem cywilnym.
 \subsection{4}
-Sprawdźmy, czy prawdą jest że liczba dzieci pochodzi z rozkładu geometrycznego o parametrze prawdopodobieństwa $p=$ `r 1/mean(data$liczba_dzieci[data$liczba_dzieci>0])*0.92` który jest przycięty od jeden do sześciu (prawadopodobieństwo proporcjonalne do $(1-p)^{(x-1)}$). Liczba ta jest nieprzypadkowa i bierze się ona z faktu, że gdyby dane pochodziły ze zwykłego rozkładu geometrycznego to odwrotność wartości oczekiwanej równa się $p$ a więc estymujemy $p$ jako odwrotność średniej z danych (ponieważ rozkład jest ucięty zmniejszamy tą wartość o $8\%$). Wpierw napiszmy funkcję która pozwoli na odpowiednie samplowanie oraz zwróci gęstość prawdopodobieństwa.
+Sprawdźmy, czy prawdą jest że liczba dzieci w parach z przynajmniej jednym dzieckiem pochodzi z rozkładu geometrycznego o parametrze prawdopodobieństwa $p=$ `r 1/mean(data$liczba_dzieci[data$liczba_dzieci>0])*0.92` który jest przycięty od jeden do sześciu (prawadopodobieństwo proporcjonalne do $(1-p)^{(x-1)}$). Liczba ta jest nieprzypadkowa i bierze się ona z faktu, że gdyby dane pochodziły ze zwykłego rozkładu geometrycznego to odwrotność wartości oczekiwanej równa się $p$ a więc estymujemy $p$ jako odwrotność średniej z danych (ponieważ rozkład jest ucięty zmniejszamy tą wartość o $8\%$). Wpierw napiszmy funkcję która pozwoli na odpowiednie samplowanie oraz zwróci gęstość prawdopodobieństwa.
 ```{r}
 dtran_geom<-function(x,p,dol,up)
 {
@@ -206,8 +209,6 @@ Kiedy mamy zdefiniowane nasze rozkłady to możemy wykorzystać test $\chi^2$ zg
 ```{r}
 p<-1/mean(data$liczba_dzieci[data$liczba_dzieci>0])*0.92
 liczba<-length(data$liczba_dzieci[data$liczba_dzieci>0])
-t<-sum(sapply(1:6,\(x) (length(data$liczba_dzieci[data$liczba_dzieci==x])
-                        -dtran_geom(x,p,1,6)*liczba)^2/(dtran_geom(x,p,1,6)*liczba)))
 observed<-sapply(1:6,\(x) length(data$liczba_dzieci[data$liczba_dzieci==x]))
 theoretical<-sapply(1:6,\(x) dtran_geom(x,p,1,6))
 test<-chisq.test(x=observed,
@@ -227,20 +228,24 @@ Widzimy więc, że model przeszacowuje liczbę dzieci dla małżeństw z jednym 
 \section{6}
 Stwórzmy podstawowy model, wykorzystujący wszystkie zmienne do objaśnienia oszczędności.
 ```{r}
+data<-na.omit(data)
 model<-lm(oszczednosci~.,data=data)
-summary(model)
+su<-summary(model)
+su
 ```
-Widzimy, że $p$-wartości odpowiadające poszczególnym parametrom są bardzo małe za wyjątkiem współczynników odpowiadających płci oraz stanu cywilnego. Skonstruujmy nowy model w którym wykorzystamy wszystkie współczynniki poza jednym i zbadamy jak zmieniają się parametry. Poniższy fragment kodu kolejno wyświetla nazwę zmiennej, jaki jest parametr $R^2$ bez tej zmiennej oraz jaki jest $RSS$ bez niej.
+Oszacowanie współczynników możemy odczytać z podsumowania modelu, wartość $R^2$ w naszym modelu to `r summary(model)$r.squared` natomiast $RSS$ wynosi `r deviance(model)`. Widzimy, że $p$-wartości odpowiadające poszczególnym parametrom są bardzo małe za wyjątkiem współczynników odpowiadających płci oraz stanu cywilnemu. Skonstruujmy nowy model w którym wykorzystamy wszystkie współczynniki poza jednym i zbadamy jak zmieniają się parametry. Poniższy fragment kodu kolejno wyświetla nazwę zmiennej, jaki jest parametr $R^2$ bez tej zmiennej, jaki jest $RSS$ bez niej oraz jaka jest o-wartość danego współczynnika.
 ```{r}
 for (name in colnames(data)[1:8])
 {
   modelp<-lm(paste("oszczednosci~.-",name),data=data)
-  print(c(name, summary(modelp)$r.squared,deviance(modelp)))
+  print(c(name, sprintf("%.4f",summary(modelp)$r.squared),
+          sprintf("%.f",deviance(modelp)),su$coefficients[match(name,colnames(data)),4]))
 }
 ```
 Widzimy wyraźnie, że wyeliminowanie płci lub stanu cywilnego daje najmniejszą zmianę współczynników (oraz odpowiadają im największe p-wartości). Dlatego też podjęto dezycję o wyeliminowaniu płci. W sten sposób otrzymujemy nowy model.
 ```{r}
 modelprim<-lm(oszczednosci~.-plec,data=data)
+summary(modelprim)
 ```
 W celu zbadania założeń LINE zbadajmy wykresy diagnostyczne. 
 ```{r}
@@ -262,4 +267,4 @@ Wykres zależności pierwiasta z standaryzowanych residuuów w zależności od p
 plot(modelprim,which=5)
 ```
 \par\
-Ostatni wykres pozwala zidentyfikować obserwacje o dużej dźwigni. Wykres pozwala ustalić, że pomiary o numerach 440, 230 oraz 296 mają nadzwyczejnie duże odchylenie i można rozważyć ich usunięcie albowiem mają dośc duży wpływ na współczynniki. Widzimy więc że dane dobrze opisywane są przez model liniowy a wszystkie założenia modelu liniowego są spełnione w naszej sytuacji. 
+Ostatni wykres pozwala zidentyfikować obserwacje o dużej dźwigni. Wykres pozwala ustalić, że pomiary o numerach 440, 230 oraz 296 mają nadzwyczejnie duże odchylenie i można rozważyć ich usunięcie albowiem mają dośc duży wpływ na współczynniki. Widzimy więc że dane dobrze opisywane są przez model liniowy oraz potrzebne założenia LINE są spełnione.
