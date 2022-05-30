@@ -11,4 +11,57 @@ library(MASS)
 library(ggplot2)
 library(caret)
 library(glmnet)
+library(reshape2)
+library(ggcorrplot)
+```
+\section{Przygotowanie techniczne}
+Ze względu na dużą ilość obliczeń do wykonania skorzystamy z równoległego modelu wykonania obliczeń. W tym celu ustawiamy liczbę dostępnych wątków jako $90\%$ dostępnych wątków oraz ustawiamy jako domyślną metodę fork-a ze standardu POSIX. Skorzystamy z biblioteki doParallel oraz foreach.
+```{r}
+library(doParallel)
+n<-as.integer(parallel::detectCores()*0.9)
+para<-parallel::makeCluster(n,type="FORK")
+doParallel::registerDoParallel(cl = para)
+foreach::getDoParRegistered()
+print(para)
+```
+\section{Eksploracja danych}
+```{r}
+xtrain<-read.csv("X_train.csv")
+ytrain<-read.csv("y_train.csv")
+xtest<-read.csv("X_test.csv")
+```
+W naszych danych mamy `r nrow(xtrain)` obserwacji z czego każdej obserwacji odpowiada `r ncol(xtrain)` zmiennych objaśniających. W danych mamy `r sum(apply(xtrain,MARGIN = 2,FUN=\(x) sum(is.nan(x))))` braków w danych. Zwizualizujmy teraz rozkład zmiennej objaśnianej.
+```{r}
+ggplot(ytrain)+geom_density(aes(CD36))+theme_minimal()
+```
+Teraz zbadajmy najbardziej skorelowane zmienne ze zmienną objaśnianą. 
+```{r}
+core<-numeric(ncol(xtrain))
+for (i in 1:ncol(xtrain))
+{
+  core[i]<-cor(ytrain$CD36,xtrain[,i])
+}
+indexy<-order(core, decreasing=TRUE)[1:250]
+mat <- round(cor(xtrain[indexy]),3)
+ggcorrplot(mat,"hc.order"=TRUE,
+          ggtheme=ggplot2::theme_dark,
+          tl.cex=0
+          )
+```
+\section{Elastic Net}
+Model elastic net charakteryzowany jest przez dwa parametry $\lambda$ oraz $\alpha$. Dla podanych argumentów celem jest minimalizacja
+\begin{equation}
+RSS+\lambda\left( \sum_i \beta_i^2\frac{(1-\alpha)}{2}+\alpha \sum_i|\beta_i|\right)
+\end{equation}
+Dla $\alpha=1$ odzyskujemy regresję lasso natomiast dla $\alpha=0$ odzyskujemy regresję grzbietową. W przeciwnym przypadku otrzymujemy model mieszany. 
+```{r}
+a<-seq(0,1,1/40)
+wyn<-numeric(length(a))
+ts<-Sys.time()
+for (i in 1:length(a))
+{
+  model<-cv.glmnet(as.matrix(xtrain),as.matrix(ytrain),alpha=a[i])
+}
+te<-Sys.time()
+print(te-ts)
 ```
