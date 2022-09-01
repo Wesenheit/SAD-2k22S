@@ -25,6 +25,6 @@ Teraz dla każdego zestawu obliczamy przedziały ufności
 ```{r}
 alp<-0.95 # poziom ufności
 przed<-apply(n, 1,(function(x) c(max(x),max(x)/alp^(1/10))))
-num<-sapply(1:1000, (function (i) a< przed[2,i] & a> przed[1,i] ))
+num<-sapply(1:1000, (function (i) a< przed[2,i] ))
 ```
 Sumarycznie w środku przedziałów znajduje się prawidłowa wartość w dokładnie `r sum(num)` z 1000 przypadków. 

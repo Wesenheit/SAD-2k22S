@@ -13,12 +13,13 @@ library(caret)
 library(glmnet)
 library(reshape2)
 library(ggcorrplot)
+library(randomForest)
 ```
 \section{Przygotowanie techniczne}
-Ze względu na dużą ilość obliczeń do wykonania skorzystamy z równoległego modelu wykonania obliczeń. W tym celu ustawiamy liczbę dostępnych wątków jako $90\%$ dostępnych wątków oraz ustawiamy jako domyślną metodę fork-a ze standardu POSIX. Skorzystamy z biblioteki doParallel oraz foreach.
+Ze względu na dużą ilość obliczeń do wykonania skorzystamy z równoległego modelu wykonania obliczeń. W tym celu ustawiamy liczbę dostępnych wątków jako $10$ dostępnych wątków oraz ustawiamy jako domyślną metodę fork-a ze standardu POSIX. Skorzystamy z biblioteki doParallel oraz foreach.
 ```{r}
 library(doParallel)
-n<-as.integer(parallel::detectCores()*0.9)
+n<-10
 para<-parallel::makeCluster(n,type="FORK")
 doParallel::registerDoParallel(cl = para)
 foreach::getDoParRegistered()
@@ -30,9 +31,13 @@ xtrain<-read.csv("X_train.csv")
 ytrain<-read.csv("y_train.csv")
 xtest<-read.csv("X_test.csv")
 ```
-W naszych danych mamy `r nrow(xtrain)` obserwacji z czego każdej obserwacji odpowiada `r ncol(xtrain)` zmiennych objaśniających. W danych mamy `r sum(apply(xtrain,MARGIN = 2,FUN=\(x) sum(is.nan(x))))` braków w danych. Zwizualizujmy teraz rozkład zmiennej objaśnianej.
+W naszych danych mamy `r nrow(xtrain)` obserwacji z czego każdej obserwacji odpowiada `r ncol(xtrain)` zmiennych objaśniających. W danych mamy `r sum(apply(xtrain,MARGIN = 2,FUN=\(x) sum(is.nan(x))))` braków w danych. Wszystkie kolumny zawierają dodatnie dane numeryczne. Zwizualizujmy teraz rozkład zmiennej objaśnianej.
 ```{r}
 ggplot(ytrain)+geom_density(aes(CD36))+theme_minimal()
+```
+Dokładne statystyki zmiennej objaśnianej uzyskujemy wykorzystując funkcję summary.
+```{r}
+summary(ytrain)
 ```
 Teraz zbadajmy najbardziej skorelowane zmienne ze zmienną objaśnianą. 
 ```{r}
@@ -48,20 +53,217 @@ ggcorrplot(mat,"hc.order"=TRUE,
           tl.cex=0
           )
 ```
+\par\
+Na koniec dzielimy dane na zbiór walidacyjny i treningowy.
+```{r}
+indexy<-sample(1:nrow(xtrain),300,replace=FALSE)
+xval<-xtrain[indexy,]
+xtrain<-xtrain[-indexy,]
+yval<-ytrain[indexy,]
+ytrain<-ytrain[-indexy,]
+```
 \section{Elastic Net}
 Model elastic net charakteryzowany jest przez dwa parametry $\lambda$ oraz $\alpha$. Dla podanych argumentów celem jest minimalizacja
 \begin{equation}
 RSS+\lambda\left( \sum_i \beta_i^2\frac{(1-\alpha)}{2}+\alpha \sum_i|\beta_i|\right)
 \end{equation}
-Dla $\alpha=1$ odzyskujemy regresję lasso natomiast dla $\alpha=0$ odzyskujemy regresję grzbietową. W przeciwnym przypadku otrzymujemy model mieszany. 
+Dla $\alpha=1$ odzyskujemy regresję lasso natomiast dla $\alpha=0$ odzyskujemy regresję grzbietową. W przeciwnym przypadku otrzymujemy model mieszany. Do przeprwadzenia regresji wykorzystamy funkcję glmnet wykorzystującą domyślnie 100 wartości parametru $\lambda$ oraz przeprwadzając walidację krzyżową dla 10 liczby próbek. W celu zbadabnia najlepszego zestawy hiperparametrów wartość $\alpha$ zmieniana była od 0 do 1 skacząc co $1/10$. Powyższe wartości zostały dobrane tak, aby dość gęsto przeszukać możliwe parametry jednoczęśnie starając się aby kod można było wykonać w krótkim czasie. 
 ```{r}
-a<-seq(0,1,1/40)
-wyn<-numeric(length(a))
-ts<-Sys.time()
-for (i in 1:length(a))
+a<-seq(0,1,1/10)
+lambda<-seq(0,1,1/10)
+grid_net<-expand.grid(alpha = a,lambda = lambda)
+star<-Sys.time()
+inde<-createFolds(ytrain,10,1)
+con<-trainControl(method="cv",number=10,index=inde)
+model_net<-train(x=as.matrix(xtrain),
+             y=ytrain,
+             method="glmnet",
+             trControl = con,
+             tuneGrid=grid_net)
+pred<-predict(model_net,xval)
+errors_test<-sqrt(mean((pred-yval)^2))
+```
+Najlepszy model uzyskano dla parametrów $\alpha$ oraz $\lambda$ odpowiednio `r model_net$bestTune$alpha` oraz `r model_net$bestTune$lambda` a średni błąd kwadratowy to `r min(model_net$results$RMSE)`. Błąd na zbiorze walidacyjnym to `r errors_test`
+
+\section{Random forest}
+Rozważmy model lasów losowy. W celu zbadania skuteczności sprawdzimy modele, wykorzystując jako hiperparametry liczbę zmiennych na dzrzewo, 
+zasadę rodziału oraz minimalnją głębokość drzewa. Aby zapobiec przeuczeniu oraz przyśpieszyć obliczenia przycinamy drzewo tak, aby nie było głębsze niż na 15 rozdziałów. Paranetry wybieramy tak aby zrealizować możliwie dużo wartości jednocześnie minimalizując czas wykonywania kodu.
+```{r}
+grid_tree <- expand.grid(
+  .mtry =c(500,1000,2000),
+  .splitrule = c("variance","extratrees"),
+  .min.node.size = c(1,5,8)
+)
+
+  model_tree<-train(x=xtrain,
+                    y=ytrain,
+                    method="ranger",
+                    trControl=con,
+                    tuneGrid=grid_tree,
+                    max.depth=15
+                    )
+pred<-predict(model_tree,xval)
+errors_test<-sqrt(mean((pred-yval)^2))
+```
+Błąd treningowy naszego klasyfikatora to `r min(model_tree$results$RMSE)` natomiast błąd testowy to `r errors_test`. Wybrane przy pomocy walidacji krzyżowej parametry z siatki to kolejno `r model_tree$bestTune$mtry`, `r model_tree$bestTune$splitrule` oraz `r model_tree$bestTune$min.node.size`. Teraz pora na porównanie naszych modeli dla najlepszych parametrów
+\begin{center}
+\begin{tabular}{ c c c c}
+Nr foldu & $RMSE$ dla sieci & $RMSE$ dla lasu losowego & model średniej \\
+ 1 & `r model_net$resample[model_net$resample$Resample=="Fold01",]$RMSE` & `r model_tree$resample[model_tree$resample$Resample=="Fold01",]$RMSE` & `r sd(ytrain[inde[[1]]])`\\
+ 2 & `r model_net$resample[model_net$resample$Resample=="Fold02",]$RMSE` & `r model_tree$resample[model_tree$resample$Resample=="Fold02",]$RMSE` & `r sd(ytrain[inde[[2]]])`\\
+ 3 & `r model_net$resample[model_net$resample$Resample=="Fold03",]$RMSE` & `r model_tree$resample[model_tree$resample$Resample=="Fold03",]$RMSE` & `r sd(ytrain[inde[[3]]])`\\
+ 4 & `r model_net$resample[model_net$resample$Resample=="Fold04",]$RMSE` & `r model_tree$resample[model_tree$resample$Resample=="Fold04",]$RMSE` & `r sd(ytrain[inde[[4]]])`\\
+ 5 & `r model_net$resample[model_net$resample$Resample=="Fold05",]$RMSE` & `r model_tree$resample[model_tree$resample$Resample=="Fold05",]$RMSE` & `r sd(ytrain[inde[[5]]])`\\
+ 6 & `r model_net$resample[model_net$resample$Resample=="Fold06",]$RMSE` & `r model_tree$resample[model_tree$resample$Resample=="Fold06",]$RMSE` & `r sd(ytrain[inde[[6]]])`\\
+ 7 & `r model_net$resample[model_net$resample$Resample=="Fold07",]$RMSE` & `r model_tree$resample[model_tree$resample$Resample=="Fold07",]$RMSE` & `r sd(ytrain[inde[[7]]])`\\
+ 8 & `r model_net$resample[model_net$resample$Resample=="Fold08",]$RMSE` & `r model_tree$resample[model_tree$resample$Resample=="Fold08",]$RMSE` & `r sd(ytrain[inde[[8]]])`\\
+ 9 & `r model_net$resample[model_net$resample$Resample=="Fold09",]$RMSE` & `r model_tree$resample[model_tree$resample$Resample=="Fold09",]$RMSE` & `r sd(ytrain[inde[[9]]])`\\
+ 10 & `r model_net$resample[model_net$resample$Resample=="Fold10",]$RMSE` & `r model_tree$resample[model_net$resample$Resample=="Fold10",]$RMSE` & `r sd(ytrain[inde[[10]]])`
+\end{tabular}
+\end{center}
+Widzimy więc, że drzewo losowe swoimi osiagami przebija zarówno model elastic net jak i model referencyjny i to dla prawie każdego foldu.
+\section{Zadanie nr 4}
+Zanim przejdziemy do predykcji sprawdźmy jak wyglądają dane przy pomocy wyzualizacji T-SNE.
+```{r}
+library(Rtsne)
+proc<-preProcess(xtrain,method=c("scale","center","nzv"))
+xtrainp<-predict(proc,xtrain)
+xtestp<-predict(proc,xtest)
+xvalp<-predict(proc,xval)
+a<-Rtsne(xtrainp,dims=2, perplexity=30)
+a<-a[2]
+a<-a$Y
+dat<-data.frame("x"=a[,1],"y"=a[,2],"col"=ytrain)
+ggplot(dat)+geom_point(aes(x=x,y=y,colour=col))
+```
+Widzimy, że dane wykazują pewną klastryzację, która ponadto wykazuje silne skorelowanie z wartością produckji białka. Widzimy więc dlaczego las losowy był skuteczniejszy od regresji liniowej. Lasy pozwalają na większe wyłapanie klastryzacji i dzięki temu regresja ma większą jakość.
+Poklastrujmy dane metodą k-średnich szukając 4 klastrów. Żądamy, aby jeden z klastrów miał mniejszą średnią niż $0,13$ i więcej niż $500$ punktów. Powód jest prozaiczny, chcemy jak najbardziej pomóc danym aby zapewnić, że dane zostaną poklastrowane w sposób sprzyjajacy regresji co nie zawsze zachodzi z wykorzystaniem algorytmu k-średnich.
+```{r}
+t<-TRUE
+while(t)
 {
-  model<-cv.glmnet(as.matrix(xtrain),as.matrix(ytrain),alpha=a[i])
+ klast<-kmeans(xtrainp,4)
+ for (i in 1:4)
+ {
+   if (mean(ytrain[klast$cluster==i])<0.13 & sum(klast$cluster==i)>500)
+   {
+     t<-FALSE
+   }
+ }
 }
-te<-Sys.time()
-print(te-ts)
+ggplot(dat)+geom_point(aes(x=x,y=y,colour=col,shape=factor(klast$cluster)))
+```
+Widzimy, że klastryzacja spisała się i zgadza się z wizualizacją T-SNE. Zbadajmy także podstawowe własności poklastrowanych danych wraz z profilami gęstości w każdym z klastrów.
+```{r}
+y<-list("1"=ytrain[klast$cluster==1],
+              "2"=ytrain[klast$cluster==2],
+              "3"=ytrain[klast$cluster==3],
+              "4"=ytrain[klast$cluster==4]
+             )
+for (a in y)
+    {
+    print(c(mean(a),sd(a),length(a)))
+}
+ggplot(data.frame("y"=y[[1]]))+geom_density(aes(y))+theme_minimal()
+ggplot(data.frame("y"=y[[2]]))+geom_density(aes(y))+theme_minimal()
+ggplot(data.frame("y"=y[[3]]))+geom_density(aes(y))+theme_minimal()
+ggplot(data.frame("y"=y[[4]]))+geom_density(aes(y))+theme_minimal()
+```
+Chcemy rozpoznać które dane należą do którego klastra wykorzystując do tego celu metodę SVM z jądrem radialnym.
+```{r}
+class<-train(xtrain,as.factor(klast$cluster),
+             method="svmRadial",
+             trControl = con,
+             preProcess="nzv")
+print(class)
+```
+W celu preprocesowania danych usuwamy te kolumny o prawie zerowej wariancji. Skuteczność naszej klasyfikacji to `r max(class$results$Accuracy)` więc widzimy że dane udaje się dobrze klasyfikować.
+Dane każdego klastra będziem trenowali oddzielnie z wykorzystaniem algorytmu XGBoost boostowania drzew. Hiperparametry wykorzystane w predykcji zostały ustalone badając rozkład błędu walidacyjnego oraz błędu treingowego dla różnych wartości hiperparametrów.
+```{r}
+val<-trainControl(method="cv",number=10)
+ret_model<-function(i)
+    {
+    x<-xtrain[klast$cluster==i,]
+    y<-ytrain[klast$cluster==i]
+    grid=expand.grid(max_depth=8,nrounds=300,
+                     eta=0.1,gamma=0.3,colsample_bytree=0.5,
+                     subsample=1, min_child_weight=3)
+    model<-train(x=x,
+             y=y,
+             method="xgbTree",
+            trControl=val,
+            tuneGrid=grid,
+            preProcess="nzv"
+            )
+    return(list("model"=model,"RMSE"=min(model$results$RMSE)))
+}
+k1<-ret_model(1)
+k2<-ret_model(2)
+k3<-ret_model(3)
+k4<-ret_model(4)
+err_tr<-sqrt(((k1$RMSE)^2*sum(klast$cluster==1)+
+                (k2$RMSE)^2*sum(klast$cluster==2)+
+                (k3$RMSE)^2*sum(klast$cluster==3)+
+                (k4$RMSE)^2*sum(klast$cluster==4))/nrow(xtrain))
+```
+Błąd treningowy jaki popełniamy to `r err_tr`. Sprawdzamy teraz błąd walidacyjny:
+```{r}
+calidacja_k<-predict(class,xval)
+wynp<-foreach(i=1:nrow(xval)) %dopar%
+    {
+    k<-calidacja_k[i]
+    if (k==1)
+        {
+        predict(k1$model,xval[i,])
+    }
+    else if (k==2)
+        {
+        predict(k2$model,xval[i,])
+    }
+    else if (k==3)
+        {
+        predict(k3$model,xval[i,])
+    }
+    else if (k==4)
+        {
+        predict(k4$model,xval[i,])
+    }
+    else
+        {
+        0
+    }
+}
+wynp<-unlist(wynp)
+er<-sqrt(mean((wynp-yval)^2))
+```
+który w naszym przypadku wynosi `r er`. Teraz robimy predykcję dla danych.
+```{r}
+test_k<-predict(class,xtest)
+wynk<-foreach(i=1:nrow(xtest)) %dopar%
+    {
+    k<-test_k[i]
+    if (k==1)
+        {
+        predict(k1$model,xtest[i,])
+    }
+    else if (k==2)
+        {
+        predict(k2$model,xtest[i,])
+    }
+    else if (k==3)
+        {
+        predict(k3$model,xtest[i,])
+    }
+    else if (k==4)
+        {
+        predict(k4$model,xtest[i,])
+    }
+    else
+        {
+        0
+    }
+    }
+wynk<-unlist(wynk)
+odp<-data.frame(ID=0:(nrow(xtest)-1),Expected=wynk)
+write.csv(odp,"odp.csv",row.names=FALSE)
 ```
